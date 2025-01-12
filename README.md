@@ -1,5 +1,7 @@
 # Bootstrap DQN
 
+Czary mary, czary mary
+
 This repo contains our implementation of a Bootstrapped DQN with options to add a Randomized Prior, Dueling, and Double DQN in ALE games. 
 
 [Deep Exploration via Bootstrapped DQN](https://arxiv.org/abs/1602.04621)
