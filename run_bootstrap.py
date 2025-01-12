@@ -138,7 +138,7 @@ class ActionGetter:
         if self.random_state.rand() < eps:
             return eps, self.random_state.randint(0, self.n_actions)
         else:
-            state = torch.Tensor(state.astype(np.float)/info['NORM_BY'])[None,:].to(info['DEVICE'])
+            state = torch.Tensor(state.astype(float)/info['NORM_BY'])[None,:].to(info['DEVICE'])
             vals = policy_net(state, active_head)
             if active_head is not None:
                 action = torch.argmax(vals, dim=1).item()
@@ -151,12 +151,12 @@ class ActionGetter:
                 return eps, action
 
 def ptlearn(states, actions, rewards, next_states, terminal_flags, masks):
-    states = torch.Tensor(states.astype(np.float)/info['NORM_BY']).to(info['DEVICE'])
-    next_states = torch.Tensor(next_states.astype(np.float)/info['NORM_BY']).to(info['DEVICE'])
+    states = torch.Tensor(states.astype(float)/info['NORM_BY']).to(info['DEVICE'])
+    next_states = torch.Tensor(next_states.astype(float)/info['NORM_BY']).to(info['DEVICE'])
     rewards = torch.Tensor(rewards).to(info['DEVICE'])
     actions = torch.LongTensor(actions).to(info['DEVICE'])
-    terminal_flags = torch.Tensor(terminal_flags.astype(np.int)).to(info['DEVICE'])
-    masks = torch.FloatTensor(masks.astype(np.int)).to(info['DEVICE'])
+    terminal_flags = torch.Tensor(terminal_flags.astype(int)).to(info['DEVICE'])
+    masks = torch.FloatTensor(masks.astype(int)).to(info['DEVICE'])
     # min history to learn is 200,000 frames in dqn - 50000 steps
     losses = [0.0 for _ in range(info['N_ENSEMBLE'])]
     opt.zero_grad()

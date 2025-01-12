@@ -1,16 +1,9 @@
 import os
 from collections import deque
 import numpy as np
-from atari_py.ale_python_interface import ALEInterface
+from ale_py import ALEInterface
 import cv2
 
-#from skimage.transform import resize
-#from skimage.color import rgb2gray
-#from imageio import imwrite
-#def preprocess_frame(observ, output_size):
-#    return resize(rgb2gray(observ),(output_size, output_size)).astype(np.float32, copy=False)
-
-# opencv is ~3x faster than skimage
 def cv_preprocess_frame(observ, output_size):
     gray = cv2.cvtColor(observ, cv2.COLOR_RGB2GRAY)
     output = cv2.resize(gray, (output_size, output_size), interpolation=cv2.INTER_NEAREST)
@@ -25,12 +18,10 @@ class Environment(object):
                  no_op_start=30,
                  rand_seed=393,
                  dead_as_end=True,
-                 max_episode_steps=18000,
-                 autofire=False):
+                 max_episode_steps=18000):
         self.max_episode_steps = max_episode_steps
         self.random_state = np.random.RandomState(rand_seed+15)
         self.ale = self._init_ale(rand_seed, rom_file)
-        # normally (160, 210)
         self.actions = self.ale.getMinimalActionSet()
 
         self.frame_skip = frame_skip
@@ -48,13 +39,13 @@ class Environment(object):
 
     @staticmethod
     def _init_ale(rand_seed, rom_file):
-        assert os.path.exists(rom_file), '%s does not exists.'
+        assert os.path.exists(rom_file), f'{rom_file} does not exist.'
         ale = ALEInterface()
-        ale.setInt('random_seed', rand_seed)
-        ale.setBool('showinfo', False)
-        ale.setInt('frame_skip', 1)
-        ale.setFloat('repeat_action_probability', 0.0)
-        ale.setBool('color_averaging', False)
+        ale.setInt(b'random_seed', rand_seed)
+        # ale.setBool(b'showinfo', False)  # Usunięte, ponieważ nie jest obsługiwane
+        ale.setInt(b'frame_skip', 1)
+        ale.setFloat(b'repeat_action_probability', 0.0)
+        ale.setBool(b'color_averaging', False)
         ale.loadROM(rom_file)
         return ale
 
@@ -63,7 +54,6 @@ class Environment(object):
         return len(self.actions)
 
     def _get_current_frame(self):
-        # global glb_counter
         screen = self.ale.getScreenRGB()
         max_screen = np.maximum(self.prev_screen, screen)
         frame = cv_preprocess_frame(max_screen, self.frame_size)
@@ -78,7 +68,6 @@ class Environment(object):
             self.frame_queue.append(
                 np.zeros((self.frame_size, self.frame_size), dtype=np.uint8))
 
-        # steps are in steps the agent sees
         self.ale.reset_game()
         self.total_reward = 0
         self.prev_screen = np.zeros(self.prev_screen.shape, dtype=np.uint8)
@@ -92,7 +81,7 @@ class Environment(object):
         self.frame_queue.append(self._get_current_frame())
         self.plot_frames.append(self.prev_screen)
         a = np.array(self.frame_queue)
-        out = np.concatenate((a[0],a[1],a[2],a[3]),axis=0).T
+        out = np.concatenate((a[0], a[1], a[2], a[3]), axis=0).T
         self.gray_plot_frames.append(out)
         if self.ale.game_over():
             print("Unexpected game over in reset", self.reset())
@@ -122,7 +111,7 @@ class Environment(object):
         if self.ale.game_over():
             self.end = True
             lives_dead = True
-        self.steps +=1
+        self.steps += 1
         if self.steps >= self.max_episode_steps:
             self.end = True
             lives_dead = True
@@ -130,7 +119,7 @@ class Environment(object):
         self.total_reward += reward
         a = np.array(self.frame_queue)
         self.prev_screen = self.ale.getScreenRGB()
-        self.gray_plot_frames.append(np.concatenate((a[0],a[1],a[2],a[3]),axis=0))
+        self.gray_plot_frames.append(np.concatenate((a[0], a[1], a[2], a[3]), axis=0))
         self.plot_frames.append(self.prev_screen)
         return np.array(self.frame_queue), reward, lives_dead, self.end
 
@@ -144,23 +133,21 @@ if __name__ == '__main__':
 
     state = env.reset()
     i = 0
-    times = [0.0 for a in range(1000)]
+    times = [0.0 for _ in range(1000)]
     total_reward = 0
     for t in times:
         action = random_state.randint(0, env.num_actions)
         st = time.time()
         state, reward, end, do_reset = env.step(action)
         total_reward += reward
-        times[i] = time.time()-st
+        times[i] = time.time() - st
         i += 1
         if end:
-            print(i,"END")
+            print(i, "END")
         if do_reset:
-            print(i,"RESET")
+            print(i, "RESET")
             state = env.reset()
     print('total_reward:', total_reward)
     print('total steps:', i)
     print('mean time', np.mean(times))
     print('max time', np.max(times))
-    # with cv - 1000 steps ('mean time', 0.0008075275421142578) max   0.0008950233459472656
-    # with skimage -       ('mean time', 0.0022023658752441406) max,  0.003056049346923828

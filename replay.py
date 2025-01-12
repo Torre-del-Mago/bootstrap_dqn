@@ -30,8 +30,8 @@ class ReplayMemory:
         self.actions = np.empty(self.size, dtype=np.int32)
         self.rewards = np.empty(self.size, dtype=np.float32)
         self.frames = np.empty((self.size, self.frame_height, self.frame_width), dtype=np.uint8)
-        self.terminal_flags = np.empty(self.size, dtype=np.bool)
-        self.masks = np.empty((self.size, self.num_heads), dtype=np.bool)
+        self.terminal_flags = np.empty(self.size, dtype=bool)
+        self.masks = np.empty((self.size, self.num_heads), dtype=bool)
 
         # Pre-allocate memory for the states and new_states in a minibatch
         self.states = np.empty((batch_size, self.agent_history_length,
