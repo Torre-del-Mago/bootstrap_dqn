@@ -1,10 +1,6 @@
 from __future__ import print_function
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 import os
 import numpy as np
-from IPython import embed
 from collections import Counter
 import torch
 torch.set_num_threads(2)
@@ -19,39 +15,34 @@ from env import Environment
 from replay import ReplayMemory
 import config
 
-def rolling_average(a, n=5) :
+def rolling_average(a, n=5):
     if n == 0:
         return a
     ret = np.cumsum(a, dtype=float)
     ret[n:] = ret[n:] - ret[:-n]
     return ret[n - 1:] / n
 
-def plot_dict_losses(plot_dict, name='loss_example.png', rolling_length=4, plot_title=''):
-    f,ax=plt.subplots(1,1,figsize=(6,6))
+def log_dict_losses(writer, plot_dict, step):
     for n in plot_dict.keys():
-        print('plotting', n)
-        ax.plot(rolling_average(plot_dict[n]['index']), rolling_average(plot_dict[n]['val']), lw=1)
-        ax.scatter(rolling_average(plot_dict[n]['index']), rolling_average(plot_dict[n]['val']), label=n, s=3)
-    ax.legend()
-    if plot_title != '':
-        plt.title(plot_title)
-    plt.savefig(name)
-    plt.close()
+        print('logging', n)
+        writer.add_scalar(n, plot_dict[n]['val'], step)
 
-def matplotlib_plot_all(p):
+def tensorboard_log_all(p, writer, step):
     epoch_num = len(p['steps'])
     epochs = np.arange(epoch_num)
     steps = p['steps']
-    plot_dict_losses({'episode steps':{'index':epochs,'val':p['episode_step']}}, name=os.path.join(model_base_filedir, 'episode_step.png'), rolling_length=0)
-    plot_dict_losses({'episode steps':{'index':epochs,'val':p['episode_relative_times']}}, name=os.path.join(model_base_filedir, 'episode_relative_times.png'), rolling_length=10)
-    plot_dict_losses({'episode head':{'index':epochs, 'val':p['episode_head']}}, name=os.path.join(model_base_filedir, 'episode_head.png'), rolling_length=0)
-    plot_dict_losses({'steps loss':{'index':steps, 'val':p['episode_loss']}}, name=os.path.join(model_base_filedir, 'steps_loss.png'))
-    plot_dict_losses({'steps eps':{'index':steps, 'val':p['eps_list']}}, name=os.path.join(model_base_filedir, 'steps_mean_eps.png'), rolling_length=0)
-    plot_dict_losses({'steps reward':{'index':steps,'val':p['episode_reward']}},  name=os.path.join(model_base_filedir, 'steps_reward.png'), rolling_length=0)
-    plot_dict_losses({'episode reward':{'index':epochs, 'val':p['episode_reward']}}, name=os.path.join(model_base_filedir, 'episode_reward.png'), rolling_length=0)
-    plot_dict_losses({'episode times':{'index':epochs,'val':p['episode_times']}}, name=os.path.join(model_base_filedir, 'episode_times.png'), rolling_length=5)
-    plot_dict_losses({'steps avg reward':{'index':steps,'val':p['avg_rewards']}}, name=os.path.join(model_base_filedir, 'steps_avg_reward.png'), rolling_length=0)
-    plot_dict_losses({'eval rewards':{'index':p['eval_steps'], 'val':p['eval_rewards']}}, name=os.path.join(model_base_filedir, 'eval_rewards_steps.png'), rolling_length=0)
+
+    # Log data to TensorBoard
+    log_dict_losses(writer, {'episode steps': {'index': epochs, 'val': p['episode_step']}}, step)
+    log_dict_losses(writer, {'episode steps': {'index': epochs, 'val': p['episode_relative_times']}}, step)
+    log_dict_losses(writer, {'episode head': {'index': epochs, 'val': p['episode_head']}}, step)
+    log_dict_losses(writer, {'steps loss': {'index': steps, 'val': p['episode_loss']}}, step)
+    log_dict_losses(writer, {'steps eps': {'index': steps, 'val': p['eps_list']}}, step)
+    log_dict_losses(writer, {'steps reward': {'index': steps, 'val': p['episode_reward']}}, step)
+    log_dict_losses(writer, {'episode reward': {'index': epochs, 'val': p['episode_reward']}}, step)
+    log_dict_losses(writer, {'episode times': {'index': epochs, 'val': p['episode_times']}}, step)
+    log_dict_losses(writer, {'steps avg reward': {'index': steps, 'val': p['avg_rewards']}}, step)
+    log_dict_losses(writer, {'eval rewards': {'index': p['eval_steps'], 'val': p['eval_rewards']}}, step)
 
 def handle_checkpoint(last_save, cnt):
     if (cnt-last_save) >= info['CHECKPOINT_EVERY_STEPS']:
@@ -196,6 +187,8 @@ def ptlearn(states, actions, rewards, next_states, terminal_flags, masks):
 def train(step_number, last_save):
     """Contains the training and evaluation loops"""
     epoch_num = len(perf['steps'])
+    writer = SummaryWriter(log_dir=model_base_filedir)
+
     while step_number < info['MAX_STEPS']:
         ########################
         ####### Training #######
@@ -259,13 +252,15 @@ def train(step_number, last_save):
                 print('avg reward', perf['avg_rewards'][-1])
                 print('last rewards', perf['episode_reward'][-info['PLOT_EVERY_EPISODES']:])
 
-                matplotlib_plot_all(perf)
+                tensorboard_log_all(perf, writer, step_number)
                 with open('rewards.txt', 'a') as reward_file:
                     print(len(perf['episode_reward']), step_number, perf['avg_rewards'][-1], file=reward_file)
         avg_eval_reward = evaluate(step_number)
         perf['eval_rewards'].append(avg_eval_reward)
         perf['eval_steps'].append(step_number)
-        matplotlib_plot_all(perf)
+        tensorboard_log_all(perf, writer, step_number)
+
+    writer.close()
 
 def evaluate(step_number):
     print("""
