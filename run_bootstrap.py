@@ -13,6 +13,7 @@ from dqn_utils import seed_everything, write_info_file, generate_gif, save_check
 from env import Environment
 from replay import ReplayMemory
 import config
+from torch.utils.tensorboard import SummaryWriter
 
 torch.set_num_threads(2)
 
@@ -50,7 +51,7 @@ def handle_checkpoint(last_save, cnt):
         st = time.time()
         print("beginning checkpoint", st)
         last_save = cnt
-         state = {
+        state = {
             'info': info,
             'optimizer': opt.state_dict(),
             'cnt': cnt,
