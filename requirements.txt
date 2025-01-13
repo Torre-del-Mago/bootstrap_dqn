@@ -4,4 +4,4 @@ ipython==8.12.3
 mlflow==2.19.0
 numpy==2.2.1
 torch
-cv2
+opencv-python
