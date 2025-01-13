@@ -17,7 +17,7 @@ services:
     runtime: nvidia
 
   mlflow:
-    image: mlflow/mlflow:latest
+    image: ghcr.io/mlflow/mlflow:latest
     ports:
       - "5000:5000"
     volumes:
