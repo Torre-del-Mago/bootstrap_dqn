@@ -1,9 +1,6 @@
-# used pipreqs
 ale_py==0.10.1
-imageio==2.35.1
+imageio==2.36.1
 ipython==8.12.3
-matplotlib==3.7.5
-numpy==1.24.4
-opencv_python==4.10.0.84
-torch==1.11.0+cu115
-wandb
+mlflow==2.19.0
+numpy==2.2.1
+torch
