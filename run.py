@@ -11,7 +11,7 @@ def run_script_instances(script_path, num_instances, args_list):
         print(f"Started instance {i + 1} with arguments: {args_list[i]}")
 
 if __name__ == "__main__":
-    script_path = 'run_bootstrap.py'
+    script_path = 'python3 run_bootstrap.py'
     num_instances = 4
 
     # List of arguments for each instance
