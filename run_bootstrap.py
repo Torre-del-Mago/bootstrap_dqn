@@ -340,6 +340,7 @@ if __name__ == '__main__':
     # parser.add_argument('-c', '--cuda', action='store_true', default=False)
     parser.add_argument('-c', '--cuda', default=0, help='cuda device number')
     parser.add_argument('-v', '--voting_nr', default=1)
+    parser.add_argument('-h', '--head_nr', default=2)
     parser.add_argument('-l', '--model_loadpath', default='', help='.pkl model file full path')
     parser.add_argument('-b', '--buffer_loadpath', default='', help='.npz replay buffer file full path')
     args = parser.parse_args()
@@ -353,12 +354,12 @@ if __name__ == '__main__':
         "GAME": 'roms/pong.bin',  # gym prefix
         "DEVICE": device,  # CPU vs GPU set by argument
         "VOTING_HEADS": args.voting_nr,  # how many heads to use for voting
-        "NAME": 'FRANKbootstrap_fasteranneal_pong',  # start files with name
+        "NAME": f"BDQN_{args.voting_nr}_{args.head_nr}",  # start files with name
         "DUELING": True,  # use dueling DQN
         "DOUBLE_DQN": True,  # use double DQN
         "PRIOR": True,  # turn on to use randomized prior
         "PRIOR_SCALE": 10,  # what to scale prior by
-        "N_ENSEMBLE": 2,  # number of bootstrap heads to use. when 1, this is a normal DQN
+        "N_ENSEMBLE": args.head_nr,  # number of bootstrap heads to use. when 1, this is a normal DQN
         "LEARN_EVERY_STEPS": 4,  # updates every 4 steps in Osband
         "BERNOULLI_PROBABILITY": 0.9,  # Probability of experience to go to each head - if 1, every experience goes to every head
         "TARGET_UPDATE": 10000,  # how often to update target network
@@ -548,7 +549,7 @@ if __name__ == '__main__':
     }
 
     # Log hyperparameters with MLflow
-    run_name = f"{info['VOTING_HEADS']}_{info['N_ENSEMBLE']}"
+    run_name = info['NAME']
     mlflow.start_run(run_name=run_name)
     mlflow.log_params(ml_config)
 
