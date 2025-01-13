@@ -121,12 +121,12 @@ class ActionGetter:
             self.slope_2 = -(self.eps_final - self.eps_final_frame) / (self.max_steps - self.eps_annealing_frames - self.replay_memory_start_size)
             self.intercept_2 = self.eps_final_frame - self.slope_2 * self.max_steps
 
-    def pt_get_action(self, step_number, state, active_head=None, evaluation=False):
+    def pt_get_action(self, step_number, state, active_heads, evaluation=False):
         """
         Args:
             step_number: int number of the current step
             state: A (4, 84, 84) sequence of frames of an atari game in grayscale
-            active_head: number of head to use, if None, will run all heads and vote
+            active_heads: list of heads to use for voting
             evaluation: A boolean saying whether the agent is being evaluated
         Returns:
             An integer between 0 and n_actions
@@ -147,12 +147,14 @@ class ActionGetter:
             return eps, self.random_state.randint(0, self.n_actions)
         else:
             state = torch.Tensor(state.astype(float) / info['NORM_BY'])[None, :].to(info['DEVICE'])
-            vals = policy_net(state, active_head)
-            if active_head is not None:
-                action = torch.argmax(vals, dim=1).item()
+            vals = policy_net(state, None)
+            # vote on action
+            if active_heads is not None:
+                acts = [torch.argmax(vals[h], dim=1).item() for h in active_heads]
+                data = Counter(acts)
+                action = data.most_common(1)[0][0]
                 return eps, action
             else:
-                # vote
                 acts = [torch.argmax(vals[h], dim=1).item() for h in range(info['N_ENSEMBLE'])]
                 data = Counter(acts)
                 action = data.most_common(1)[0][0]
@@ -222,7 +224,7 @@ def train(step_number, last_save):
             st = time.time()
             episode_reward_sum = 0
             random_state.shuffle(heads)
-            active_head = heads[0]
+            active_heads = heads[:info['VOTING_HEADS']]  # Use a subset of heads for voting
             epoch_num += 1
             ep_eps_list = []
             ptloss_list = []
@@ -231,7 +233,7 @@ def train(step_number, last_save):
                     action = 1
                     eps = 0
                 else:
-                    eps, action = action_getter.pt_get_action(step_number, state=state, active_head=active_head)
+                    eps, action = action_getter.pt_get_action(step_number, state=state, active_heads=active_heads)
                 ep_eps_list.append(eps)
                 next_state, reward, life_lost, terminal = env.step(action)
                 # Store transition in the replay memory
@@ -260,7 +262,7 @@ def train(step_number, last_save):
             ep_time = et - st
             perf['steps'].append(step_number)
             perf['episode_step'].append(step_number - start_steps)
-            perf['episode_head'].append(active_head)
+            perf['episode_head'].append(active_heads)
             perf['eps_list'].append(np.mean(ep_eps_list))
             perf['episode_loss'].append(np.mean(ptloss_list))
             perf['episode_reward'].append(episode_reward_sum)
@@ -309,7 +311,7 @@ def evaluate(step_number):
             if life_lost:
                 action = 1
             else:
-                eps, action = action_getter.pt_get_action(step_number, state, active_head=None, evaluation=True)
+                eps, action = action_getter.pt_get_action(step_number, state, active_heads=None, evaluation=True)
             next_state, reward, life_lost, terminal = env.step(action)
             evaluate_step_number += 1
             episode_steps += 1
@@ -337,7 +339,7 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     # parser.add_argument('-c', '--cuda', action='store_true', default=False)
     parser.add_argument('-c', '--cuda', default=0, help='cuda device number')
-    parser.add_argument('-m', '--modified', action='store_true', default=False)
+    parser.add_argument('-v', '--voting_nr', default=1)
     parser.add_argument('-l', '--model_loadpath', default='', help='.pkl model file full path')
     parser.add_argument('-b', '--buffer_loadpath', default='', help='.npz replay buffer file full path')
     args = parser.parse_args()
@@ -350,7 +352,7 @@ if __name__ == '__main__':
         #"GAME":'roms/breakout.bin', # gym prefix
         "GAME": 'roms/pong.bin',  # gym prefix
         "DEVICE": device,  # CPU vs GPU set by argument
-        "MODIFIED": args.modified,  # use modified reward
+        "VOTING_HEADS": args.voting_nr,  # how many heads to use for voting
         "NAME": 'FRANKbootstrap_fasteranneal_pong',  # start files with name
         "DUELING": True,  # use dueling DQN
         "DOUBLE_DQN": True,  # use double DQN
@@ -546,7 +548,7 @@ if __name__ == '__main__':
     }
 
     # Log hyperparameters with MLflow
-    run_name = "modified" if info['MODIFIED'] else "normal"
+    run_name = f"{info['VOTING_HEADS']}_{info['N_ENSEMBLE']}"
     mlflow.start_run(run_name=run_name)
     mlflow.log_params(ml_config)
 
