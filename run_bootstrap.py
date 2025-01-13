@@ -13,7 +13,9 @@ from dqn_utils import seed_everything, write_info_file, generate_gif, save_check
 from env import Environment
 from replay import ReplayMemory
 import config
-from torch.utils.tensorboard import SummaryWriter
+# from torch.utils.tensorboard import SummaryWriter
+import mlflow
+import mlflow.pytorch
 
 torch.set_num_threads(2)
 
@@ -29,22 +31,34 @@ def log_dict_losses(writer, plot_dict, step):
         print('logging', n)
         writer.add_scalar(n, plot_dict[n]['val'], step)
 
-def tensorboard_log_all(p, writer, step):
-    epoch_num = len(p['steps'])
-    epochs = np.arange(epoch_num)
-    steps = p['steps']
+# def tensorboard_log_all(p, writer, step):
+#     epoch_num = len(p['steps'])
+#     epochs = np.arange(epoch_num)
+#     steps = p['steps']
 
-    # Log data to TensorBoard
-    log_dict_losses(writer, {'episode steps': {'index': epochs, 'val': p['episode_step']}}, step)
-    log_dict_losses(writer, {'episode steps': {'index': epochs, 'val': p['episode_relative_times']}}, step)
-    log_dict_losses(writer, {'episode head': {'index': epochs, 'val': p['episode_head']}}, step)
-    log_dict_losses(writer, {'steps loss': {'index': steps, 'val': p['episode_loss']}}, step)
-    log_dict_losses(writer, {'steps eps': {'index': steps, 'val': p['eps_list']}}, step)
-    log_dict_losses(writer, {'steps reward': {'index': steps, 'val': p['episode_reward']}}, step)
-    log_dict_losses(writer, {'episode reward': {'index': epochs, 'val': p['episode_reward']}}, step)
-    log_dict_losses(writer, {'episode times': {'index': epochs, 'val': p['episode_times']}}, step)
-    log_dict_losses(writer, {'steps avg reward': {'index': steps, 'val': p['avg_rewards']}}, step)
-    log_dict_losses(writer, {'eval rewards': {'index': p['eval_steps'], 'val': p['eval_rewards']}}, step)
+#     # Log data to TensorBoard
+#     log_dict_losses(writer, {'episode steps': {'index': epochs, 'val': p['episode_step']}}, step)
+#     log_dict_losses(writer, {'episode steps': {'index': epochs, 'val': p['episode_relative_times']}}, step)
+#     log_dict_losses(writer, {'episode head': {'index': epochs, 'val': p['episode_head']}}, step)
+#     log_dict_losses(writer, {'steps loss': {'index': steps, 'val': p['episode_loss']}}, step)
+#     log_dict_losses(writer, {'steps eps': {'index': steps, 'val': p['eps_list']}}, step)
+#     log_dict_losses(writer, {'steps reward': {'index': steps, 'val': p['episode_reward']}}, step)
+#     log_dict_losses(writer, {'episode reward': {'index': epochs, 'val': p['episode_reward']}}, step)
+#     log_dict_losses(writer, {'episode times': {'index': epochs, 'val': p['episode_times']}}, step)
+#     log_dict_losses(writer, {'steps avg reward': {'index': steps, 'val': p['avg_rewards']}}, step)
+#     log_dict_losses(writer, {'eval rewards': {'index': p['eval_steps'], 'val': p['eval_rewards']}}, step)
+
+def mlflow_log_all(p, step):
+    mlflow.log_metric("episode_step", p['episode_step'][-1], step)
+    mlflow.log_metric("episode_head", p['episode_head'][-1], step)
+    mlflow.log_metric("eps_list", p['eps_list'][-1], step)
+    mlflow.log_metric("episode_loss", p['episode_loss'][-1], step)
+    mlflow.log_metric("episode_reward", p['episode_reward'][-1], step)
+    mlflow.log_metric("episode_times", p['episode_times'][-1], step)
+    mlflow.log_metric("episode_relative_times", p['episode_relative_times'][-1], step)
+    mlflow.log_metric("avg_rewards", p['avg_rewards'][-1], step)
+    mlflow.log_metric("eval_rewards", p['eval_rewards'][-1], step)
+    mlflow.log_metric("eval_steps", p['eval_steps'][-1], step)
 
 def handle_checkpoint(last_save, cnt):
     if (cnt - last_save) >= info['CHECKPOINT_EVERY_STEPS']:
@@ -260,14 +274,16 @@ def train(step_number, last_save):
                 print('avg reward', perf['avg_rewards'][-1])
                 print('last rewards', perf['episode_reward'][-info['PLOT_EVERY_EPISODES']:])
 
-                tensorboard_log_all(perf, writer, step_number)
+                mlflow_log_all(perf, step_number)
+                # tensorboard_log_all(perf, writer, step_number)
                 with open('rewards.txt', 'a') as reward_file:
                     print(len(perf['episode_reward']), step_number, perf['avg_rewards'][-1], file=reward_file)
         
         avg_eval_reward = evaluate(step_number)
         perf['eval_rewards'].append(avg_eval_reward)
         perf['eval_steps'].append(step_number)
-        tensorboard_log_all(perf, writer, step_number)
+        mlflow_log_all(perf, step_number)
+        # tensorboard_log_all(perf, writer, step_number)
 
     writer.close()
 
@@ -310,7 +326,7 @@ def evaluate(step_number):
     print("Evaluation score:\n", np.mean(eval_rewards))
     generate_gif(model_base_filedir, step_number, frames_for_gif, eval_rewards[0], name='test', results=results_for_eval)
 
-    # Show the evaluation score in TensorBoard
+    # Show the evaluation score in MLflow
     efile = os.path.join(model_base_filedir, 'eval_rewards.txt')
     with open(efile, 'a') as eval_reward_file:
         print(step_number, np.mean(eval_rewards), file=eval_reward_file)
@@ -319,24 +335,28 @@ def evaluate(step_number):
 if __name__ == '__main__':
     from argparse import ArgumentParser
     parser = ArgumentParser()
-    parser.add_argument('-c', '--cuda', action='store_true', default=False)
+    # parser.add_argument('-c', '--cuda', action='store_true', default=False)
+    parser.add_argument('-c', '--cuda', default=0, help='cuda device number')
+    parser.add_argument('-m', '--modified', action='store_true', default=False)
     parser.add_argument('-l', '--model_loadpath', default='', help='.pkl model file full path')
     parser.add_argument('-b', '--buffer_loadpath', default='', help='.npz replay buffer file full path')
     args = parser.parse_args()
 
-    device = 'cuda' if args.cuda else 'cpu'
+    # device = 'cuda:1' if args.cuda else 'cpu'
+    device = f'cuda:{args.cuda}'
     print(f"running on {device}")
 
     info = {
         #"GAME":'roms/breakout.bin', # gym prefix
         "GAME": 'roms/pong.bin',  # gym prefix
         "DEVICE": device,  # CPU vs GPU set by argument
+        "MODIFIED": args.modified,  # use modified reward
         "NAME": 'FRANKbootstrap_fasteranneal_pong',  # start files with name
         "DUELING": True,  # use dueling DQN
         "DOUBLE_DQN": True,  # use double DQN
         "PRIOR": True,  # turn on to use randomized prior
         "PRIOR_SCALE": 10,  # what to scale prior by
-        "N_ENSEMBLE": 9,  # number of bootstrap heads to use. when 1, this is a normal DQN
+        "N_ENSEMBLE": 2,  # number of bootstrap heads to use. when 1, this is a normal DQN
         "LEARN_EVERY_STEPS": 4,  # updates every 4 steps in Osband
         "BERNOULLI_PROBABILITY": 0.9,  # Probability of experience to go to each head - if 1, every experience goes to every head
         "TARGET_UPDATE": 10000,  # how often to update target network
@@ -494,5 +514,47 @@ if __name__ == '__main__':
                 print(e)
                 print(f'not able to load from buffer: {args.buffer_loadpath}. exit() to continue with empty buffer')
 
+
+    ml_config = {
+        'ADAM_LEARNING_RATE': info['ADAM_LEARNING_RATE'],
+        'EPS_INITIAL': info['EPS_INITIAL'],
+        'EPS_FINAL': info['EPS_FINAL'],
+        'EPS_EVAL': info['EPS_EVAL'],
+        'EPS_ANNEALING_FRAMES': info['EPS_ANNEALING_FRAMES'],
+        'EPS_FINAL_FRAME': info['EPS_FINAL_FRAME'],
+        'BUFFER_SIZE': info['BUFFER_SIZE'],
+        'CHECKPOINT_EVERY_STEPS': info['CHECKPOINT_EVERY_STEPS'],
+        'EVAL_FREQUENCY': info['EVAL_FREQUENCY'],
+        'NORM_BY': info['NORM_BY'],
+        'N_ENSEMBLE': info['N_ENSEMBLE'],
+        'LEARN_EVERY_STEPS': info['LEARN_EVERY_STEPS'],
+        'TARGET_UPDATE': info['TARGET_UPDATE'],
+        'MIN_HISTORY_TO_LEARN': info['MIN_HISTORY_TO_LEARN'],
+        'NETWORK_INPUT_SIZE': info['NETWORK_INPUT_SIZE'],
+        'SEED': info['SEED'],
+        'MAX_STEPS': info['MAX_STEPS'],
+        'MAX_EPISODE_STEPS': info['MAX_EPISODE_STEPS'],
+        'FRAME_SKIP': info['FRAME_SKIP'],
+        'MAX_NO_OP_FRAMES': info['MAX_NO_OP_FRAMES'],
+        'DEAD_AS_END': info['DEAD_AS_END'],
+        'NAME': info['NAME'],
+        'DUELING': info['DUELING'],
+        'DOUBLE_DQN': info['DOUBLE_DQN'],
+        'PRIOR': info['PRIOR'],
+        'PRIOR_SCALE': info['PRIOR_SCALE'],
+        'GAME': info['GAME']
+    }
+
+    # Log hyperparameters with MLflow
+    run_name = "modified" if info['MODIFIED'] else "normal"
+    mlflow.start_run(run_name=run_name)
+    mlflow.log_params(ml_config)
+
+    mlflow.pytorch.log_model(policy_net, "models")
+    mlflow.pytorch.log_model(target_net, "models")
+
     train(start_step_number, start_last_save)
+
+    
+    mlflow.end_run()
 
